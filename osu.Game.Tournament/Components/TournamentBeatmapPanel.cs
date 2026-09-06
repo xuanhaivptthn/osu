@@ -197,9 +197,7 @@ namespace osu.Game.Tournament.Components
                     ? currentMatch.Value.Team1.Value?.Acronym.Value
                     : currentMatch.Value.Team2.Value?.Acronym.Value;
 
-                string teamLabel = !string.IsNullOrWhiteSpace(teamAcronym) && teamAcronym.Length <= 6
-                    ? teamAcronym.ToUpperInvariant()
-                    : (protectEntry.Team == TeamColour.Red ? "ORANGE" : "AQUA");
+                string teamLabel = protectEntry.Team == TeamColour.Red ? "ORANGE" : "AQUA";
 
                 protectBadgeText.Text = $"{teamLabel} PROTECT";
             }
