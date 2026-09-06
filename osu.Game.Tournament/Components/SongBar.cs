@@ -14,6 +14,8 @@ using osu.Game.Beatmaps.Legacy;
 using osu.Game.Extensions;
 using osu.Game.Graphics;
 using osu.Game.Models;
+using osu.Game.Online.API;
+using osu.Game.Online.API.Requests;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Screens.Menu;
@@ -31,6 +33,12 @@ namespace osu.Game.Tournament.Components
 
         [Resolved]
         private IBindable<RulesetInfo> ruleset { get; set; } = null!;
+
+        [Resolved]
+        private IAPIProvider? api { get; set; }
+
+        private GetBeatmapAttributesRequest? attributesRequest;
+        private Container? starRatingContainer;
 
         public IBeatmapInfo? Beatmap
         {
@@ -125,6 +133,8 @@ namespace osu.Game.Tournament.Components
                 },
             };
 
+            attributesRequest?.Cancel();
+
             var rulesetInstance = ruleset.Value.CreateInstance();
 
             var convertedMods = rulesetInstance.ConvertFromLegacyMods(mods).ToList();
@@ -134,11 +144,26 @@ namespace osu.Game.Tournament.Components
             double bpm = FormatUtils.RoundBPM(beatmap.BPM, rate);
             double length = beatmap.Length / rate;
 
-            string srExtra = "";
+            double displayedStarRating = beatmap.StarRating;
 
-            if (convertedMods.Any(x => x is ModHardRock) || convertedMods.Any(x => x is ModDoubleTime))
+            if (mods != LegacyMods.None && beatmap.OnlineID > 0 && api != null)
             {
-                srExtra = "*";
+                int currentBeatmapId = beatmap.OnlineID;
+                var req = new GetBeatmapAttributesRequest(beatmap.OnlineID, ruleset.Value.OnlineID, mods);
+
+                req.Success += res =>
+                {
+                    if (res.Attributes != null && beatmap?.OnlineID == currentBeatmapId)
+                    {
+                        Schedule(() =>
+                        {
+                            if (starRatingContainer != null)
+                                starRatingContainer.Child = new DiffPiece(("Star Rating", $"{res.Attributes.StarRating.FormatStarRating()}"));
+                        });
+                    }
+                };
+
+                api.Queue(attributesRequest = req);
             }
 
             (string heading, string content)[] stats;
@@ -202,7 +227,11 @@ namespace osu.Game.Tournament.Components
                                         Children = new Drawable[]
                                         {
                                             new DiffPiece(stats),
-                                            new DiffPiece(("Star Rating", $"{beatmap.StarRating.FormatStarRating()}{srExtra}"))
+                                            starRatingContainer = new Container
+                                            {
+                                                AutoSizeAxes = Axes.Both,
+                                                Child = new DiffPiece(("Star Rating", $"{displayedStarRating.FormatStarRating()}"))
+                                            }
                                         }
                                     },
                                     new FillFlowContainer
