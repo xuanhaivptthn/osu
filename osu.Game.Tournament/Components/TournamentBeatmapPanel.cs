@@ -29,6 +29,9 @@ namespace osu.Game.Tournament.Components
         private readonly Bindable<TournamentMatch?> currentMatch = new Bindable<TournamentMatch?>();
 
         private Box flash = null!;
+        private Container protectBadge = null!;
+        private Box protectBadgeBackground = null!;
+        private TournamentSpriteText protectBadgeText = null!;
 
         public TournamentBeatmapPanel(IBeatmapInfo? beatmap, string mod = "")
         {
@@ -127,6 +130,34 @@ namespace osu.Game.Tournament.Components
                     RelativeSizeAxes = Axes.Y,
                 });
             }
+
+            AddInternal(protectBadge = new Container
+            {
+                Anchor = Anchor.BottomRight,
+                Origin = Anchor.BottomRight,
+                Margin = new MarginPadding { Bottom = 6, Right = string.IsNullOrEmpty(mod) ? 6 : 74 },
+                AutoSizeAxes = Axes.X,
+                Height = 14,
+                Alpha = 0,
+                Children = new Drawable[]
+                {
+                    protectBadgeBackground = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Color4.Black,
+                        Alpha = 0.55f,
+                    },
+                    protectBadgeText = new TournamentSpriteText
+                    {
+                        Anchor = Anchor.Centre,
+                        Origin = Anchor.Centre,
+                        Text = "PROTECTED",
+                        Font = OsuFont.Torus.With(weight: FontWeight.Bold, size: 10),
+                        Colour = Color4.White,
+                        Padding = new MarginPadding { Horizontal = 4 },
+                    },
+                }
+            });
         }
 
         private void matchChanged(ValueChangedEvent<TournamentMatch?> match)
@@ -147,11 +178,32 @@ namespace osu.Game.Tournament.Components
         private void updateState()
         {
             if (currentMatch.Value == null)
-            {
                 return;
+
+            var entries = currentMatch.Value.PicksBans.Where(p => p.BeatmapID == Beatmap?.OnlineID).ToList();
+
+            // The protect badge is shown whenever there is a protect entry, regardless of other states.
+            var protectEntry = entries.FirstOrDefault(p => p.Type == ChoiceType.Protect);
+            bool isProtected = protectEntry != null;
+            protectBadge.FadeTo(isProtected ? 1 : 0, 200);
+
+            if (protectEntry != null)
+            {
+                Color4 protectColour = protectEntry.Team == TeamColour.Red ? TournamentGame.COLOUR_RED : TournamentGame.COLOUR_BLUE;
+                protectBadgeBackground.Colour = protectColour;
+                protectBadgeBackground.Alpha = 1f;
+
+                string? teamAcronym = protectEntry.Team == TeamColour.Red
+                    ? currentMatch.Value.Team1.Value?.Acronym.Value
+                    : currentMatch.Value.Team2.Value?.Acronym.Value;
+
+                string teamLabel = protectEntry.Team == TeamColour.Red ? "RED" : "BLUE";
+
+                protectBadgeText.Text = $"{teamLabel} PROTECT";
             }
 
-            var newChoice = currentMatch.Value.PicksBans.FirstOrDefault(p => p.BeatmapID == Beatmap?.OnlineID);
+            // For border/dim state, prefer pick/ban over protect when both exist.
+            var newChoice = entries.FirstOrDefault(p => p.Type != ChoiceType.Protect) ?? entries.FirstOrDefault();
 
             bool shouldFlash = newChoice != choice;
 
@@ -162,18 +214,24 @@ namespace osu.Game.Tournament.Components
 
                 BorderThickness = 6;
 
-                BorderColour = TournamentGame.GetTeamColour(newChoice.Team);
-
                 switch (newChoice.Type)
                 {
                     case ChoiceType.Pick:
+                        BorderColour = TournamentGame.GetTeamColour(newChoice.Team);
                         Colour = Color4.White;
                         Alpha = 1;
                         break;
 
                     case ChoiceType.Ban:
+                        BorderColour = TournamentGame.GetTeamColour(newChoice.Team);
                         Colour = Color4.Gray;
                         Alpha = 0.5f;
+                        break;
+
+                    case ChoiceType.Protect:
+                        BorderColour = TournamentGame.GetTeamColour(newChoice.Team);
+                        Colour = Color4.White;
+                        Alpha = 1;
                         break;
                 }
             }

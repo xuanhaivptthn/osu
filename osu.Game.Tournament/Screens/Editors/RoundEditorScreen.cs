@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System.Linq;
@@ -86,6 +86,12 @@ namespace osu.Game.Tournament.Screens.Editors
                                 LabelText = "# of Bans",
                                 Width = 0.33f,
                                 Current = Model.BanCount
+                            },
+                            new SettingsSlider<int>
+                            {
+                                LabelText = "# of Protects",
+                                Width = 0.33f,
+                                Current = Model.ProtectCount
                             },
                             new SettingsSlider<int>
                             {

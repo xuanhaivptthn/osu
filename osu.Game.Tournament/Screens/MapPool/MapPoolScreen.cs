@@ -34,6 +34,8 @@ namespace osu.Game.Tournament.Screens.MapPool
         private OsuButton buttonBlueBan = null!;
         private OsuButton buttonRedPick = null!;
         private OsuButton buttonBluePick = null!;
+        private OsuButton buttonRedProtect = null!;
+        private OsuButton buttonBlueProtect = null!;
 
         private ScheduledDelegate? scheduledScreenChange;
 
@@ -66,6 +68,18 @@ namespace osu.Game.Tournament.Screens.MapPool
                         new TournamentSpriteText
                         {
                             Text = "Current Mode"
+                        },
+                        buttonRedProtect = new TourneyButton
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            Text = "Red Protect",
+                            Action = () => setMode(TeamColour.Red, ChoiceType.Protect)
+                        },
+                        buttonBlueProtect = new TourneyButton
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            Text = "Blue Protect",
+                            Action = () => setMode(TeamColour.Blue, ChoiceType.Protect)
                         },
                         buttonRedBan = new TourneyButton
                         {
@@ -126,12 +140,16 @@ namespace osu.Game.Tournament.Screens.MapPool
             if (CurrentMatch.Value?.Round.Value == null)
                 return;
 
+            int totalProtectsRequired = CurrentMatch.Value.Round.Value.ProtectCount.Value * 2;
             int totalBansRequired = CurrentMatch.Value.Round.Value.BanCount.Value * 2;
+
+            if (CurrentMatch.Value.PicksBans.Count(p => p.Type == ChoiceType.Protect) < totalProtectsRequired)
+                return;
 
             if (CurrentMatch.Value.PicksBans.Count(p => p.Type == ChoiceType.Ban) < totalBansRequired)
                 return;
 
-            // if bans have already been placed, beatmap changes result in a selection being made automatically
+            // if protects and bans have already been placed, beatmap changes result in a selection being made automatically
             if (beatmap.NewValue?.OnlineID > 0)
                 addForBeatmap(beatmap.NewValue.OnlineID);
         }
@@ -145,6 +163,8 @@ namespace osu.Game.Tournament.Screens.MapPool
             buttonBlueBan.Colour = setColour(pickColour == TeamColour.Blue && pickType == ChoiceType.Ban);
             buttonRedPick.Colour = setColour(pickColour == TeamColour.Red && pickType == ChoiceType.Pick);
             buttonBluePick.Colour = setColour(pickColour == TeamColour.Blue && pickType == ChoiceType.Pick);
+            buttonRedProtect.Colour = setColour(pickColour == TeamColour.Red && pickType == ChoiceType.Protect);
+            buttonBlueProtect.Colour = setColour(pickColour == TeamColour.Blue && pickType == ChoiceType.Protect);
 
             static Color4 setColour(bool active) => active ? Color4.White : Color4.Gray;
         }
@@ -154,30 +174,40 @@ namespace osu.Game.Tournament.Screens.MapPool
             if (CurrentMatch.Value?.Round.Value == null)
                 return;
 
+            int totalProtectsRequired = CurrentMatch.Value.Round.Value.ProtectCount.Value * 2;
             int totalBansRequired = CurrentMatch.Value.Round.Value.BanCount.Value * 2;
 
             TeamColour lastPickColour = CurrentMatch.Value.PicksBans.LastOrDefault()?.Team ?? TeamColour.Red;
 
             TeamColour nextColour;
 
+            bool hasAllProtects = CurrentMatch.Value.PicksBans.Count(p => p.Type == ChoiceType.Protect) >= totalProtectsRequired;
             bool hasAllBans = CurrentMatch.Value.PicksBans.Count(p => p.Type == ChoiceType.Ban) >= totalBansRequired;
 
-            if (!hasAllBans)
+            if (!hasAllProtects)
             {
-                // Ban phase: switch teams every second ban.
+                // Protect phase: alternate teams each protect.
                 nextColour = CurrentMatch.Value.PicksBans.Count % 2 == 1
                     ? getOppositeTeamColour(lastPickColour)
                     : lastPickColour;
+                setMode(nextColour, ChoiceType.Protect);
+            }
+            else if (!hasAllBans)
+            {
+                // Ban phase: alternate teams each ban.
+                nextColour = CurrentMatch.Value.PicksBans.Count % 2 == 1
+                    ? getOppositeTeamColour(lastPickColour)
+                    : lastPickColour;
+                setMode(nextColour, ChoiceType.Ban);
             }
             else
             {
-                // Pick phase : switch teams every pick, except for the first pick which generally goes to the team that placed the last ban.
+                // Pick phase: switch teams every pick, except for the first pick which generally goes to the team that placed the last ban.
                 nextColour = pickType == ChoiceType.Pick
                     ? getOppositeTeamColour(lastPickColour)
                     : lastPickColour;
+                setMode(nextColour, ChoiceType.Pick);
             }
-
-            setMode(nextColour, hasAllBans ? ChoiceType.Pick : ChoiceType.Ban);
 
             TeamColour getOppositeTeamColour(TeamColour colour) => colour == TeamColour.Red ? TeamColour.Blue : TeamColour.Red;
         }
@@ -223,8 +253,8 @@ namespace osu.Game.Tournament.Screens.MapPool
                 // don't attempt to add if the beatmap isn't in our pool
                 return;
 
-            if (CurrentMatch.Value.PicksBans.Any(p => p.BeatmapID == beatmapId))
-                // don't attempt to add if already exists.
+            if (CurrentMatch.Value.PicksBans.Any(p => p.BeatmapID == beatmapId && p.Type == pickType))
+                // don't attempt to add if already exists with the same type.
                 return;
 
             CurrentMatch.Value.PicksBans.Add(new BeatmapChoice
@@ -242,6 +272,11 @@ namespace osu.Game.Tournament.Screens.MapPool
                 {
                     scheduledScreenChange?.Cancel();
                     scheduledScreenChange = Scheduler.AddDelayed(() => { sceneManager?.SetScreen(typeof(GameplayScreen)); }, 10000);
+                }
+                else
+                {
+                    // A ban or protect was placed - cancel any pending transition to gameplay.
+                    scheduledScreenChange?.Cancel();
                 }
             }
         }
